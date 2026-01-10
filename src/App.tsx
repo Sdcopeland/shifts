@@ -410,54 +410,38 @@ export default function App() {
 
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
     
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    const canShare = 'share' in navigator;
-
-    if (isIOS) {
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'myshifts.ics');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      setTimeout(() => {
-        alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
-      }, 100);
-    } else if (canShare) {
-      const file = new File([blob], 'myshifts.ics', { type: 'text/calendar;charset=utf-8' });
+    // Temporarily unregister service worker to allow blob downloads
+    let serviceWorkerRegistration = null;
+    if ('serviceWorker' in navigator) {
       try {
-        await navigator.share({
-          files: [file],
-          title: 'My Shifts',
-          text: 'Export my shifts to calendar'
-        });
-      } catch {
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'myshifts.ics');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        setTimeout(() => {
-          alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
-        }, 100);
+        serviceWorkerRegistration = await navigator.serviceWorker.getRegistration();
+        if (serviceWorkerRegistration) {
+          await serviceWorkerRegistration.unregister();
+        }
+      } catch (e) {
+        console.error('Failed to unregister service worker:', e);
       }
-    } else {
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'myshifts.ics');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
+    }
+
+    // Perform export
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'myshifts.ics');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+
+    setTimeout(() => {
+      alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
+    }, 100);
+
+    // Re-register service worker after a short delay
+    if (serviceWorkerRegistration) {
       setTimeout(() => {
-        alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
-      }, 100);
+        window.location.reload();
+      }, 2000);
     }
   };
 
@@ -466,54 +450,35 @@ export default function App() {
       const jsonData = await shiftDB.exportData();
       const blob = new Blob([jsonData], { type: 'application/json' });
       
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      const canShare = 'share' in navigator;
-
-      if (isIOS) {
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'shiftsync-backup.json');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        setTimeout(() => {
-          alert('Backup exported successfully!');
-        }, 100);
-      } else if (canShare) {
-        const file = new File([blob], 'shiftsync-backup.json', { type: 'application/json' });
+      let serviceWorkerRegistration = null;
+      if ('serviceWorker' in navigator) {
         try {
-          await navigator.share({
-            files: [file],
-            title: 'ShiftSync Backup',
-            text: 'Export ShiftSync backup data'
-          });
-        } catch {
-          const url = window.URL.createObjectURL(blob);
-          const link = document.createElement('a');
-          link.href = url;
-          link.setAttribute('download', 'shiftsync-backup.json');
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          
-          setTimeout(() => {
-            alert('Backup exported successfully!');
-          }, 100);
+          serviceWorkerRegistration = await navigator.serviceWorker.getRegistration();
+          if (serviceWorkerRegistration) {
+            await serviceWorkerRegistration.unregister();
+          }
+        } catch (e) {
+          console.error('Failed to unregister service worker:', e);
         }
-      } else {
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'shiftsync-backup.json');
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'shiftsync-backup.json');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      setTimeout(() => {
+        alert('Backup exported successfully!');
+      }, 100);
+
+      if (serviceWorkerRegistration) {
         setTimeout(() => {
-          alert('Backup exported successfully!');
-        }, 100);
+          window.location.reload();
+        }, 2000);
       }
     } catch (e) {
       console.error('Failed to export data:', e);
