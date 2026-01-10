@@ -408,42 +408,56 @@ export default function App() {
       return;
     }
 
-    // Try multiple methods for iOS PWA compatibility
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const file = new File([blob], 'myshifts.ics', { type: 'text/calendar;charset=utf-8' });
+    
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const canShare = 'share' in navigator;
 
-    // Method 1: Web Share API (best for iOS PWA)
-    if (navigator.share) {
+    if (isIOS) {
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'myshifts.ics');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      setTimeout(() => {
+        alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
+      }, 100);
+    } else if (canShare) {
+      const file = new File([blob], 'myshifts.ics', { type: 'text/calendar;charset=utf-8' });
       try {
         await navigator.share({
           files: [file],
           title: 'My Shifts',
           text: 'Export my shifts to calendar'
         });
-        return;
       } catch {
-        // Fall through to other methods if share fails or isn't supported
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'myshifts.ics');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        setTimeout(() => {
+          alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
+        }, 100);
       }
-    }
-
-    // Method 2: Standard download (works on desktop)
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'myshifts.ics');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    // Method 3: Show helpful message for iOS PWA users
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window as any).navigator.standalone;
-    
-    if (isIOS && isStandalone) {
+    } else {
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'myshifts.ics');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
       setTimeout(() => {
-        alert('For best results, open this app in Safari instead of from your home screen, then tap "Add to Calendar" again.');
-      }, 500);
+        alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
+      }, 100);
     }
   };
 
@@ -451,40 +465,55 @@ export default function App() {
     try {
       const jsonData = await shiftDB.exportData();
       const blob = new Blob([jsonData], { type: 'application/json' });
-      const file = new File([blob], 'shiftsync-backup.json', { type: 'application/json' });
+      
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      const canShare = 'share' in navigator;
 
-      // Try Web Share API first (better for iOS PWA)
-      if (navigator.share) {
+      if (isIOS) {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'shiftsync-backup.json');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        setTimeout(() => {
+          alert('Backup exported successfully!');
+        }, 100);
+      } else if (canShare) {
+        const file = new File([blob], 'shiftsync-backup.json', { type: 'application/json' });
         try {
           await navigator.share({
             files: [file],
             title: 'ShiftSync Backup',
             text: 'Export ShiftSync backup data'
           });
-          return;
         } catch {
-          // Fall through to standard download if share fails
+          const url = window.URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href = url;
+          link.setAttribute('download', 'shiftsync-backup.json');
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+          
+          setTimeout(() => {
+            alert('Backup exported successfully!');
+          }, 100);
         }
-      }
-
-      // Standard download method
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'shiftsync-backup.json');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      
-      // Show helpful message for iOS PWA users
-      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window as any).navigator.standalone;
-      
-      if (isIOS && isStandalone) {
+      } else {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'shiftsync-backup.json');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
         setTimeout(() => {
-          alert('For best results, open this app in Safari instead of from your home screen, then tap "Export Backup" again.');
-        }, 500);
+          alert('Backup exported successfully!');
+        }, 100);
       }
     } catch (e) {
       console.error('Failed to export data:', e);
