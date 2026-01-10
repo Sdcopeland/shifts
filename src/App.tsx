@@ -408,7 +408,25 @@ export default function App() {
       return;
     }
 
+    // Try multiple methods for iOS PWA compatibility
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const file = new File([blob], 'myshifts.ics', { type: 'text/calendar;charset=utf-8' });
+
+    // Method 1: Web Share API (best for iOS PWA)
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          files: [file],
+          title: 'My Shifts',
+          text: 'Export my shifts to calendar'
+        });
+        return;
+      } catch {
+        // Fall through to other methods if share fails or isn't supported
+      }
+    }
+
+    // Method 2: Standard download (works on desktop)
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -416,12 +434,40 @@ export default function App() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    
+    // Method 3: Show helpful message for iOS PWA users
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window as any).navigator.standalone;
+    
+    if (isIOS && isStandalone) {
+      setTimeout(() => {
+        alert('For best results, open this app in Safari instead of from your home screen, then tap "Add to Calendar" again.');
+      }, 500);
+    }
   };
 
   const exportData = async () => {
     try {
       const jsonData = await shiftDB.exportData();
       const blob = new Blob([jsonData], { type: 'application/json' });
+      const file = new File([blob], 'shiftsync-backup.json', { type: 'application/json' });
+
+      // Try Web Share API first (better for iOS PWA)
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: 'ShiftSync Backup',
+            text: 'Export ShiftSync backup data'
+          });
+          return;
+        } catch {
+          // Fall through to standard download if share fails
+        }
+      }
+
+      // Standard download method
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
@@ -429,6 +475,17 @@ export default function App() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      
+      // Show helpful message for iOS PWA users
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window as any).navigator.standalone;
+      
+      if (isIOS && isStandalone) {
+        setTimeout(() => {
+          alert('For best results, open this app in Safari instead of from your home screen, then tap "Export Backup" again.');
+        }, 500);
+      }
     } catch (e) {
       console.error('Failed to export data:', e);
       setError(`Failed to export data: ${e}`);
