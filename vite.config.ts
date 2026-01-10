@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['vite.svg'],
+      includeAssets: ['favicon.svg', 'logo.svg'],
       manifest: {
         name: 'ShiftSync',
         short_name: 'ShiftSync',
@@ -16,7 +16,7 @@ export default defineConfig({
         theme_color: '#2563eb',
         icons: [
           {
-            src: 'vite.svg',
+            src: 'logo.svg',
             sizes: '512x512',
             type: 'image/svg+xml',
           },
