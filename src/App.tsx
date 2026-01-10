@@ -408,17 +408,39 @@ export default function App() {
       return;
     }
 
-    // Use data URI to bypass service worker entirely
-    const encodedData = encodeURIComponent(icsContent);
-    const dataUri = `data:text/calendar;charset=utf-8,${encodedData}`;
-    
-    // Open the data URI - iOS should handle this natively
-    window.location.href = dataUri;
-    
-    // Show success message
-    setTimeout(() => {
-      alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
-    }, 100);
+    // Try multiple approaches for iOS
+    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+    if (isIOS) {
+      // Approach 1: Create hidden anchor and dispatch click event
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.download = 'myshifts.ics';
+      link.style.display = 'none';
+      document.body.appendChild(link);
+
+      const clickEvent = new MouseEvent('click', {
+        view: window,
+        bubbles: true,
+        cancelable: true
+      });
+      link.dispatchEvent(clickEvent);
+
+      setTimeout(() => {
+        document.body.removeChild(link);
+        alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
+      }, 100);
+    } else {
+      // Non-iOS: Use data URI approach
+      const encodedData = encodeURIComponent(icsContent);
+      const dataUri = `data:text/calendar;charset=utf-8,${encodedData}`;
+      window.location.href = dataUri;
+      
+      setTimeout(() => {
+        alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
+      }, 100);
+    }
   };
 
   const exportData = async () => {
