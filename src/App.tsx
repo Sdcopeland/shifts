@@ -408,16 +408,12 @@ export default function App() {
       return;
     }
 
-    const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
+    // Use data URI to bypass service worker entirely
+    const encodedData = encodeURIComponent(icsContent);
+    const dataUri = `data:text/calendar;charset=utf-8,${encodedData}`;
     
-    // Use window.open() instead of anchor.click() - may work better on iOS
-    const url = window.URL.createObjectURL(blob);
-    window.open(url, '_blank');
-    
-    // Revoke URL after a delay
-    setTimeout(() => {
-      window.URL.revokeObjectURL(url);
-    }, 5000);
+    // Open the data URI - iOS should handle this natively
+    window.location.href = dataUri;
     
     // Show success message
     setTimeout(() => {
@@ -428,14 +424,13 @@ export default function App() {
   const exportData = async () => {
     try {
       const jsonData = await shiftDB.exportData();
-      const blob = new Blob([jsonData], { type: 'application/json' });
       
-      const url = window.URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      // Use data URI to bypass service worker
+      const encodedData = encodeURIComponent(jsonData);
+      const dataUri = `data:application/json;charset=utf-8,${encodedData}`;
       
-      setTimeout(() => {
-        window.URL.revokeObjectURL(url);
-      }, 5000);
+      // Open as data URI - browser should handle this
+      window.location.href = dataUri;
       
       setTimeout(() => {
         alert('Backup exported successfully!');
