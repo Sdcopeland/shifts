@@ -1,45 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Calendar, Download, Plus, Trash2, Settings, ChevronLeft, ChevronRight, Moon, Sun, Briefcase, Check, RotateCcw, Edit3, DollarSign, Clock } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Calendar, Download, Plus, Trash2, Settings, ChevronLeft, ChevronRight, Moon, Sun, Briefcase, Check, RotateCcw, Edit3, DollarSign, Clock, AlertCircle } from 'lucide-react';
+import { shiftDB, type ShiftEvent, type ShiftConfig, type PaySettings } from './db';
 
 // --- Types ---
 
 type ShiftType = 'morning' | 'day' | 'night' | 'off' | 'custom';
 
-interface ShiftConfig {
-  id: ShiftType;
-  label: string;
-  color: string;
-  textColor: string;
-  startTime: string; // HH:mm
-  endTime: string;   // HH:mm
-  iconName: 'Sun' | 'Briefcase' | 'Moon' | 'Check' | 'Edit3';
-}
-
-interface ShiftEvent {
-  id: string;
-  dateStr: string; // YYYY-MM-DD
-  type: ShiftType;
-  startTime?: string;
-  endTime?: string;
-  customLabel?: string;
-}
-
-interface PaySettings {
-  hourlyRate: number;
-  nightDiff: number;    // Extra $ per hour
-  weekendDiff: number;  // Extra $ per hour
-  nightStart: string;   // HH:mm (e.g., 22:00)
-  nightEnd: string;     // HH:mm (e.g., 06:00)
-  weekendDays: number[]; // Array of day indices (0=Sun, 1=Mon, etc.)
-}
-
 // --- Defaults ---
 
 const DEFAULT_SHIFT_TYPES: ShiftConfig[] = [
-  { id: 'morning', label: 'Morning', color: 'bg-amber-100', textColor: 'text-amber-700', startTime: '06:00', endTime: '14:00', iconName: 'Sun' },
-  { id: 'day', label: 'Day', color: 'bg-blue-100', textColor: 'text-blue-700', startTime: '09:00', endTime: '17:00', iconName: 'Briefcase' },
-  { id: 'night', label: 'Night', color: 'bg-indigo-100', textColor: 'text-indigo-700', startTime: '22:00', endTime: '06:00', iconName: 'Moon' },
-  { id: 'off', label: 'Off', color: 'bg-slate-100', textColor: 'text-slate-500', startTime: '', endTime: '', iconName: 'Check' },
+  { id: 'morning', label: 'Morning', color: 'bg-amber-100', textColor: 'text-amber-700', darkColor: 'bg-amber-900/50', darkTextColor: 'text-amber-200', startTime: '06:00', endTime: '14:00', iconName: 'Sun' },
+  { id: 'day', label: 'Day', color: 'bg-blue-100', textColor: 'text-blue-700', darkColor: 'bg-blue-900/50', darkTextColor: 'text-blue-200', startTime: '09:00', endTime: '17:00', iconName: 'Briefcase' },
+  { id: 'night', label: 'Night', color: 'bg-indigo-100', textColor: 'text-indigo-700', darkColor: 'bg-indigo-900/50', darkTextColor: 'text-indigo-200', startTime: '22:00', endTime: '06:00', iconName: 'Moon' },
+  { id: 'off', label: 'Off', color: 'bg-slate-100', textColor: 'text-slate-500', darkColor: 'bg-slate-800', darkTextColor: 'text-slate-400', startTime: '', endTime: '', iconName: 'Check' },
 ];
 
 const DEFAULT_PAY_SETTINGS: PaySettings = {
@@ -66,6 +39,11 @@ const formatDateStr = (year: number, month: number, day: number) => {
 const getTodayStr = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+let idCounter = 0;
+const generateId = () => {
+  return `shift_${Date.now()}_${++idCounter}`;
 };
 
 const getIcon = (name: string, size: number = 16) => {
@@ -133,7 +111,6 @@ const calculateShiftPay = (shift: ShiftEvent, paySettings: PaySettings) => {
   pay += nightHours * paySettings.nightDiff;
 
   // --- Weekend Diff Calculation ---
-  const date = new Date(shift.dateStr);
   // Note: Date strings are YYYY-MM-DD. creating 'new Date()' uses UTC or local depending on browser,
   // but for .getDay() we want to ensure we are talking about the specific calendar day selected.
   // We add 'T12:00:00' to ensure we don't hit timezone edge cases rolling back a day.
@@ -161,6 +138,8 @@ export default function App() {
   const [view, setView] = useState<'calendar' | 'list' | 'earnings' | 'settings'>('calendar');
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [customForm, setCustomForm] = useState({ label: 'Custom Shift', start: '09:00', end: '17:00' });
@@ -171,32 +150,91 @@ export default function App() {
   const daysInMonth = getDaysInMonth(year, month);
   const firstDay = getFirstDayOfMonth(year, month);
 
-  // --- Persistence ---
-
+  // --- Dark Mode ---
   useEffect(() => {
-    try {
-      const savedShifts = localStorage.getItem('shift-data');
-      if (savedShifts) setShifts(JSON.parse(savedShifts));
-
-      const savedConfigs = localStorage.getItem('shift-configs');
-      if (savedConfigs) setShiftConfigs(JSON.parse(savedConfigs));
-
-      const savedPay = localStorage.getItem('pay-settings');
-      if (savedPay) setPaySettings(JSON.parse(savedPay));
-    } catch (e) {
-      console.error("Failed to load data", e);
-    } finally {
-      setIsLoaded(true);
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+      setIsDarkMode(true);
+      document.documentElement.classList.add('dark');
+    } else {
+      setIsDarkMode(false);
+      document.documentElement.classList.remove('dark');
     }
   }, []);
 
   useEffect(() => {
-    if (isLoaded) {
-        localStorage.setItem('shift-data', JSON.stringify(shifts));
-        localStorage.setItem('shift-configs', JSON.stringify(shiftConfigs));
-        localStorage.setItem('pay-settings', JSON.stringify(paySettings));
+    try {
+      localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+      if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    } catch (e) {
+      console.error('Failed to save theme:', e);
     }
-  }, [shifts, shiftConfigs, paySettings, isLoaded]);
+  }, [isDarkMode]);
+
+  // --- Persistence ---
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setError(null);
+        await shiftDB.init();
+
+        const savedShifts = await shiftDB.getAllShifts();
+        if (Object.keys(savedShifts).length > 0) {
+          setShifts(savedShifts);
+        }
+
+        const savedConfigs = await shiftDB.getConfigs();
+        if (savedConfigs.length > 0) {
+          setShiftConfigs(savedConfigs);
+        }
+
+        const savedPay = await shiftDB.getPaySettings();
+        if (savedPay) {
+          setPaySettings(savedPay);
+        }
+      } catch (e) {
+        const errorMessage = `Failed to load data: ${e}`;
+        console.error(errorMessage);
+        setError(errorMessage);
+      } finally {
+        setIsLoaded(true);
+      }
+    };
+
+    loadData();
+  }, []);
+
+  useEffect(() => {
+    if (isLoaded && Object.keys(shifts).length > 0) {
+      shiftDB.putShifts(shifts).catch((e) => {
+        console.error('Failed to save shifts:', e);
+        setError(`Failed to save shifts: ${e}`);
+      });
+    }
+  }, [shifts, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && shiftConfigs.length > 0) {
+      shiftDB.putConfigs(shiftConfigs).catch((e) => {
+        console.error('Failed to save configs:', e);
+        setError(`Failed to save configs: ${e}`);
+      });
+    }
+  }, [shiftConfigs, isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && paySettings) {
+      shiftDB.putPaySettings(paySettings).catch((e) => {
+        console.error('Failed to save pay settings:', e);
+        setError(`Failed to save pay settings: ${e}`);
+      });
+    }
+  }, [paySettings, isLoaded]);
 
   // --- Earnings Calculation Memo ---
   const monthlyStats = useMemo(() => {
@@ -230,41 +268,59 @@ export default function App() {
     setShowAddModal(true);
   };
 
-  const addShift = (type: ShiftType) => {
+  const addShift = async (type: ShiftType) => {
     if (!selectedDate) return;
     
     if (type === 'off') {
-      const newShifts = { ...shifts };
-      delete newShifts[selectedDate];
-      setShifts(newShifts);
+      try {
+        await shiftDB.deleteShift(selectedDate);
+        const newShifts = { ...shifts };
+        delete newShifts[selectedDate];
+        setShifts(newShifts);
+      } catch (e) {
+        console.error('Failed to delete shift:', e);
+        setError(`Failed to delete shift: ${e}`);
+      }
       setShowAddModal(false);
       return;
     }
 
     const config = shiftConfigs.find(t => t.id === type);
     const newShift: ShiftEvent = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: generateId(),
       dateStr: selectedDate,
       type,
       startTime: config?.startTime,
       endTime: config?.endTime,
     };
 
-    setShifts({ ...shifts, [selectedDate]: newShift });
+    try {
+      await shiftDB.putShift(newShift);
+      setShifts({ ...shifts, [selectedDate]: newShift });
+    } catch (e) {
+      console.error('Failed to save shift:', e);
+      setError(`Failed to save shift: ${e}`);
+    }
     setShowAddModal(false);
   };
 
-  const addCustomShift = () => {
+  const addCustomShift = async () => {
     if (!selectedDate) return;
     const newShift: ShiftEvent = {
-      id: Math.random().toString(36).substr(2, 9),
+      id: generateId(),
       dateStr: selectedDate,
       type: 'custom',
       startTime: customForm.start,
       endTime: customForm.end,
       customLabel: customForm.label
     };
-    setShifts({ ...shifts, [selectedDate]: newShift });
+    try {
+      await shiftDB.putShift(newShift);
+      setShifts({ ...shifts, [selectedDate]: newShift });
+    } catch (e) {
+      console.error('Failed to save custom shift:', e);
+      setError(`Failed to save custom shift: ${e}`);
+    }
     setShowAddModal(false);
     setIsCustomMode(false);
   };
@@ -300,15 +356,15 @@ export default function App() {
     }
   };
 
-  const generateICS = () => {
+  const generateICS = async () => {
     const today = getTodayStr();
     let icsContent = 
 `BEGIN:VCALENDAR
-VERSION:2.0
-PRODID:-//ShiftSync//iOS Scheduler//EN
-CALSCALE:GREGORIAN
-METHOD:PUBLISH
-`;
+ VERSION:2.0
+ PRODID:-//ShiftSync//iOS Scheduler//EN
+ CALSCALE:GREGORIAN
+ METHOD:PUBLISH
+ `;
     let exportCount = 0;
     Object.values(shifts).forEach(shift => {
       // SMART EXPORT: Only future shifts to avoid duplicates
@@ -326,6 +382,7 @@ METHOD:PUBLISH
       const [startH, startM] = (shift.startTime || '09:00').split(':').map(Number);
       const [endH, endM] = (shift.endTime || '17:00').split(':').map(Number);
       const startDate = new Date(y, m - 1, d, startH, startM);
+      // eslint-disable-next-line prefer-const
       let endDate = new Date(y, m - 1, d, endH, endM);
       if (endDate < startDate) endDate.setDate(endDate.getDate() + 1);
 
@@ -333,14 +390,14 @@ METHOD:PUBLISH
 
       icsContent += 
 `BEGIN:VEVENT
-UID:${shift.id}@shiftsync.app
-DTSTAMP:${formatICSDate(new Date())}
-DTSTART:${formatICSDate(startDate)}
-DTEND:${formatICSDate(endDate)}
-SUMMARY:${label}
-DESCRIPTION:Scheduled via ShiftSync
-END:VEVENT
-`;
+ UID:${shift.id}@shiftsync.app
+ DTSTAMP:${formatICSDate(new Date())}
+ DTSTART:${formatICSDate(startDate)}
+ DTEND:${formatICSDate(endDate)}
+ SUMMARY:${label}
+ DESCRIPTION:Scheduled via ShiftSync
+ END:VEVENT
+ `;
       exportCount++;
     });
 
@@ -361,21 +418,56 @@ END:VEVENT
     document.body.removeChild(link);
   };
 
+  const exportData = async () => {
+    try {
+      const jsonData = await shiftDB.exportData();
+      const blob = new Blob([jsonData], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'shiftsync-backup.json');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (e) {
+      console.error('Failed to export data:', e);
+      setError(`Failed to export data: ${e}`);
+    }
+  };
+
   // --- Renders ---
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 font-sans text-slate-900 overflow-hidden">
+    <div className="flex flex-col h-screen bg-slate-50 dark:bg-slate-900 font-sans text-slate-900 dark:text-slate-100 overflow-hidden">
       
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 py-3 pt-12 flex justify-between items-center sticky top-0 z-10">
-        <h1 className="text-xl font-bold tracking-tight text-slate-900">ShiftSync</h1>
+      <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-700 px-4 py-3 pt-12 flex justify-between items-center sticky top-0 z-10">
+        <h1 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">ShiftSync</h1>
         <button 
           onClick={generateICS}
-          className="text-blue-600 font-medium text-sm flex items-center gap-1 active:opacity-50"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-medium text-sm flex items-center gap-2 shadow-sm shadow-blue-200 active:scale-95 transition-all"
         >
-          Export <Download size={16} />
+          <Calendar size={16} />
+          Add to Calendar
         </button>
       </header>
+
+      {/* Error Notification */}
+      {error && (
+        <div className="bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800 px-4 py-3 flex items-start gap-2">
+          <AlertCircle size={16} className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-red-800 dark:text-red-200 text-sm font-medium">Storage Error</p>
+            <p className="text-red-600 dark:text-red-300 text-xs">{error}</p>
+          </div>
+          <button
+            onClick={() => setError(null)}
+            className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-200 flex-shrink-0"
+          >
+            <Plus size={16} className="rotate-45" />
+          </button>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto pb-20">
@@ -383,13 +475,13 @@ END:VEVENT
         {view === 'calendar' && (
           <div className="p-4">
             <div className="flex justify-between items-center mb-6">
-              <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+              <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400">
                 <ChevronLeft size={24} />
               </button>
-              <h2 className="text-lg font-semibold text-slate-800">
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">
                 {MONTH_NAMES[month]} {year}
               </h2>
-              <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded-full text-slate-500">
+              <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400">
                 <ChevronRight size={24} />
               </button>
             </div>
@@ -414,16 +506,19 @@ END:VEVENT
                 const isToday = new Date().toDateString() === new Date(year, month, day).toDateString();
                 
                 let displayColor = 'bg-gray-100';
+                let displayTextColor = 'text-gray-700';
                 let displayIcon = <Briefcase size={16} />;
 
                 if (shift) {
                   if (shift.type === 'custom') {
-                    displayColor = 'bg-purple-100 text-purple-700';
+                    displayColor = isDarkMode ? 'bg-purple-900/50' : 'bg-purple-100';
+                    displayTextColor = isDarkMode ? 'text-purple-200' : 'text-purple-700';
                     displayIcon = <Edit3 size={16} />;
                   } else {
                     const config = shiftConfigs.find(t => t.id === shift.type);
                     if (config) {
-                      displayColor = config.color;
+                      displayColor = isDarkMode ? config.darkColor : config.color;
+                      displayTextColor = isDarkMode ? config.darkTextColor : config.textColor;
                       displayIcon = getIcon(config.iconName);
                     }
                   }
@@ -433,15 +528,15 @@ END:VEVENT
                   <div 
                     key={day} 
                     onClick={() => handleDayClick(day)}
-                    className={`h-24 md:h-32 bg-white rounded-xl border border-slate-100 p-1 flex flex-col items-center justify-between cursor-pointer active:scale-95 transition-transform shadow-sm relative overflow-hidden ${isToday ? 'ring-2 ring-blue-500 ring-offset-1' : ''}`}
+                    className={`h-24 md:h-32 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 p-1 flex flex-col items-center justify-between cursor-pointer active:scale-95 transition-transform shadow-sm relative overflow-hidden ${isToday ? 'ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-slate-900' : ''}`}
                   >
-                    <span className={`text-sm font-medium ${isToday ? 'text-blue-600' : 'text-slate-700'}`}>{day}</span>
+                    <span className={`text-sm font-medium ${isToday ? 'text-blue-600' : 'text-slate-700 dark:text-slate-300'}`}>{day}</span>
                     {shift && (
                       <div className="w-full flex-1 flex flex-col items-center justify-center gap-1 mt-1">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center ${displayColor}`}>
-                           {displayIcon}
+                           <span className={displayTextColor}>{displayIcon}</span>
                         </div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase leading-none truncate w-full text-center px-1">
+                        <span className={`text-[10px] font-bold uppercase leading-none truncate w-full text-center px-1 ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>
                           {shift.startTime}
                         </span>
                       </div>
@@ -455,57 +550,57 @@ END:VEVENT
 
         {view === 'list' && (
            <div className="p-4 space-y-3">
-             <h2 className="text-lg font-semibold mb-4 text-slate-800">Upcoming Shifts</h2>
+             <h2 className="text-lg font-semibold mb-4 text-slate-800 dark:text-slate-200">Upcoming Shifts</h2>
              {Object.entries(shifts)
                .sort((a, b) => a[0].localeCompare(b[0]))
                .filter(([date]) => date >= getTodayStr())
                .map(([date, shift]) => {
-                 let label = "Shift";
-                 let color = "bg-gray-100";
-                 let textColor = "text-gray-700";
-                 let icon = <Briefcase size={16} />;
+                  let label = "Shift";
+                  let color = "bg-gray-100";
+                  let textColor = "text-gray-700";
+                  let icon = <Briefcase size={16} />;
 
-                 if (shift.type === 'custom') {
-                   label = shift.customLabel || "Custom Shift";
-                   color = "bg-purple-100";
-                   textColor = "text-purple-700";
-                   icon = <Edit3 size={16} />;
-                 } else {
-                   const config = shiftConfigs.find(t => t.id === shift.type);
-                   if (config) {
-                     label = config.label;
-                     color = config.color;
-                     textColor = config.textColor;
-                     icon = getIcon(config.iconName);
-                   }
-                 }
+                  if (shift.type === 'custom') {
+                    label = shift.customLabel || "Custom Shift";
+                    color = isDarkMode ? "bg-purple-900/50" : "bg-purple-100";
+                    textColor = isDarkMode ? "text-purple-200" : "text-purple-700";
+                    icon = <Edit3 size={16} />;
+                  } else {
+                    const config = shiftConfigs.find(t => t.id === shift.type);
+                    if (config) {
+                      label = config.label;
+                      color = isDarkMode ? config.darkColor : config.color;
+                      textColor = isDarkMode ? config.darkTextColor : config.textColor;
+                      icon = getIcon(config.iconName);
+                    }
+                  }
 
-                 return (
-                   <div key={shift.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
-                     <div className={`w-12 h-12 rounded-full flex items-center justify-center ${color}`}>
-                       <span className={textColor}>{icon}</span>
-                     </div>
-                     <div>
-                       <h3 className="font-semibold text-slate-900">{label}</h3>
-                       <p className="text-sm text-slate-500">{date} • {shift.startTime} - {shift.endTime}</p>
-                     </div>
-                   </div>
-                 );
-               })}
+                  return (
+                    <div key={shift.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700 flex items-center gap-4">
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center ${color}`}>
+                        <span className={textColor}>{icon}</span>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-slate-900 dark:text-white">{label}</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">{date} • {shift.startTime} - {shift.endTime}</p>
+                      </div>
+                    </div>
+                  );
+                })}
              {Object.keys(shifts).filter(d => d >= getTodayStr()).length === 0 && (
                <div className="text-center py-10 text-slate-400">
                  No upcoming shifts scheduled.
                </div>
              )}
            </div>
-        )}
+         )}
 
         {view === 'earnings' && (
           <div className="p-4 space-y-6">
             <div className="flex justify-between items-center">
-               <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><ChevronLeft/></button>
-               <h2 className="text-xl font-bold text-slate-900">{MONTH_NAMES[month]} {year}</h2>
-               <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 rounded-full text-slate-500"><ChevronRight/></button>
+               <button onClick={handlePrevMonth} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400"><ChevronLeft/></button>
+               <h2 className="text-xl font-bold text-slate-900 dark:text-white">{MONTH_NAMES[month]} {year}</h2>
+               <button onClick={handleNextMonth} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400"><ChevronRight/></button>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -519,22 +614,22 @@ END:VEVENT
                 </div>
               </div>
 
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+              <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
                  <div className="flex items-center gap-2 text-slate-400 mb-2">
                    <Clock size={16} /> <span className="text-xs font-bold uppercase">Total Hours</span>
                  </div>
-                 <div className="text-2xl font-bold text-slate-800">{monthlyStats.totalHours.toFixed(1)}</div>
+                 <div className="text-2xl font-bold text-slate-800 dark:text-white">{monthlyStats.totalHours.toFixed(1)}</div>
               </div>
 
-              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm">
+              <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
                  <div className="flex items-center gap-2 text-slate-400 mb-2">
                    <Calendar size={16} /> <span className="text-xs font-bold uppercase">Shifts</span>
                  </div>
-                 <div className="text-2xl font-bold text-slate-800">{monthlyStats.count}</div>
+                 <div className="text-2xl font-bold text-slate-800 dark:text-white">{monthlyStats.count}</div>
               </div>
             </div>
 
-            <div className="bg-slate-50 p-4 rounded-xl text-sm text-slate-500 border border-slate-100">
+            <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl text-sm text-slate-500 dark:text-slate-400 border border-slate-100 dark:border-slate-700">
                Estimates based on settings. Includes Base Pay, Night Differential (${paySettings.nightDiff}/hr), and Weekend Incentive ($ {paySettings.weekendDiff}/hr).
             </div>
           </div>
@@ -543,31 +638,64 @@ END:VEVENT
         {view === 'settings' && (
           <div className="p-4 space-y-8">
             
+            {/* Appearance Section */}
+            <section>
+               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
+                 {isDarkMode ? <Moon size={20} className="text-blue-600"/> : <Sun size={20} className="text-amber-600"/>} Appearance
+               </h2>
+               <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-4">
+                 <button 
+                   onClick={() => setIsDarkMode(!isDarkMode)}
+                   className="w-full flex items-center justify-between"
+                 >
+                   <span className="font-medium text-slate-700 dark:text-slate-300">Dark Mode</span>
+                   <div className="w-12 h-7 bg-slate-200 dark:bg-blue-600 rounded-full relative transition-colors">
+                     <div className={`absolute top-1 w-5 h-5 bg-white rounded-full shadow-sm transition-all ${isDarkMode ? 'right-1' : 'left-1'}`}></div>
+                   </div>
+                 </button>
+               </div>
+            </section>
+
+            {/* Data Section */}
+            <section>
+               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
+                 <Download size={20} className="text-green-600"/> Data
+               </h2>
+               <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm p-4 space-y-3">
+                 <button 
+                   onClick={exportData}
+                   className="w-full py-3 rounded-xl bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-100 dark:hover:bg-blue-900/50 transition-colors"
+                 >
+                   <Download size={16} /> Export Backup
+                 </button>
+               </div>
+            </section>
+            
             {/* Rates Section */}
             <section>
-               <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
                  <DollarSign size={20} className="text-green-600"/> Pay Rates
                </h2>
-               <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-                 <div className="p-4 border-b border-slate-50 flex justify-between items-center">
-                   <span className="font-medium text-slate-700">Base Hourly Rate</span>
+               <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm overflow-hidden">
+                 <div className="p-4 border-b border-slate-50 dark:border-slate-700 flex justify-between items-center">
+                   <span className="font-medium text-slate-700 dark:text-slate-300">Base Hourly Rate</span>
                    <div className="flex items-center gap-1">
-                     <span className="text-slate-400">$</span>
-                     <input type="number" value={paySettings.hourlyRate} onChange={(e) => updatePaySetting('hourlyRate', e.target.value)} className="w-16 text-right font-bold text-slate-900 bg-transparent focus:outline-none focus:border-b border-blue-500" />
+                     <span className="text-slate-400 dark:text-slate-500">$</span>
+                     <input type="number" value={paySettings.hourlyRate} onChange={(e) => updatePaySetting('hourlyRate', e.target.value)} className="w-16 text-right font-bold text-slate-900 dark:text-white bg-transparent focus:outline-none focus:border-b border-blue-500" />
                    </div>
                  </div>
-                 <div className="p-4 border-b border-slate-50 flex justify-between items-center">
-                   <span className="font-medium text-slate-700">Night Differential</span>
+                 <div className="p-4 border-b border-slate-50 dark:border-slate-700 flex justify-between items-center">
+                   <span className="font-medium text-slate-700 dark:text-slate-300">Night Differential</span>
                    <div className="flex items-center gap-1">
-                     <span className="text-slate-400">+$</span>
-                     <input type="number" value={paySettings.nightDiff} onChange={(e) => updatePaySetting('nightDiff', e.target.value)} className="w-16 text-right font-bold text-slate-900 bg-transparent focus:outline-none focus:border-b border-blue-500" />
+                     <span className="text-slate-400 dark:text-slate-500">+$</span>
+                     <input type="number" value={paySettings.nightDiff} onChange={(e) => updatePaySetting('nightDiff', e.target.value)} className="w-16 text-right font-bold text-slate-900 dark:text-white bg-transparent focus:outline-none focus:border-b border-blue-500" />
                    </div>
                  </div>
                  <div className="p-4 flex justify-between items-center">
-                   <span className="font-medium text-slate-700">Weekend Incentive</span>
+                   <span className="font-medium text-slate-700 dark:text-slate-300">Weekend Incentive</span>
                    <div className="flex items-center gap-1">
-                     <span className="text-slate-400">+$</span>
-                     <input type="number" value={paySettings.weekendDiff} onChange={(e) => updatePaySetting('weekendDiff', e.target.value)} className="w-16 text-right font-bold text-slate-900 bg-transparent focus:outline-none focus:border-b border-blue-500" />
+                     <span className="text-slate-400 dark:text-slate-500">+$</span>
+                     <input type="number" value={paySettings.weekendDiff} onChange={(e) => updatePaySetting('weekendDiff', e.target.value)} className="w-16 text-right font-bold text-slate-900 dark:text-white bg-transparent focus:outline-none focus:border-b border-blue-500" />
                    </div>
                  </div>
                </div>
@@ -579,11 +707,11 @@ END:VEVENT
                     <div className="flex gap-3 text-sm">
                       <div className="flex-1">
                         <label className="text-xs text-slate-400 mb-1 block">Start</label>
-                        <input type="time" value={paySettings.nightStart} onChange={(e) => updatePayTimeString('nightStart', e.target.value)} className="w-full p-2 bg-white border border-slate-200 rounded-lg" />
+                        <input type="time" value={paySettings.nightStart} onChange={(e) => updatePayTimeString('nightStart', e.target.value)} className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white" />
                       </div>
                       <div className="flex-1">
                         <label className="text-xs text-slate-400 mb-1 block">End</label>
-                        <input type="time" value={paySettings.nightEnd} onChange={(e) => updatePayTimeString('nightEnd', e.target.value)} className="w-full p-2 bg-white border border-slate-200 rounded-lg" />
+                        <input type="time" value={paySettings.nightEnd} onChange={(e) => updatePayTimeString('nightEnd', e.target.value)} className="w-full p-2 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white" />
                       </div>
                     </div>
                   </div>
@@ -595,7 +723,7 @@ END:VEVENT
                           <button 
                             key={day} 
                             onClick={() => toggleWeekendDay(index)}
-                            className={`w-9 h-9 rounded-full text-xs font-bold transition-all ${paySettings.weekendDays.includes(index) ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}
+                            className={`w-9 h-9 rounded-full text-xs font-bold transition-all ${paySettings.weekendDays.includes(index) ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700 text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'}`}
                           >
                             {day[0]}
                           </button>
@@ -607,21 +735,21 @@ END:VEVENT
 
             {/* Shift Config Section */}
             <section>
-              <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
                 <Clock size={20} className="text-blue-600"/> Shift Defaults
               </h2>
               <div className="space-y-4">
                 {shiftConfigs.filter(s => s.id !== 'off').map(config => (
-                  <div key={config.id} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
+                  <div key={config.id} className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
                     <div className="flex items-center gap-3 mb-4">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${config.color}`}>
-                        <span className={config.textColor}>{getIcon(config.iconName)}</span>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDarkMode ? config.darkColor : config.color}`}>
+                        <span className={isDarkMode ? config.darkTextColor : config.textColor}>{getIcon(config.iconName)}</span>
                       </div>
                       <input 
                         type="text" 
                         value={config.label}
                         onChange={(e) => updateConfig(config.id, 'label', e.target.value)}
-                        className="font-semibold text-slate-900 bg-transparent border-b border-dashed border-slate-300 focus:border-blue-500 focus:outline-none w-full"
+                        className="font-semibold text-slate-900 dark:text-white bg-transparent border-b border-dashed border-slate-300 dark:border-slate-600 focus:border-blue-500 focus:outline-none w-full"
                       />
                     </div>
                     
@@ -631,16 +759,16 @@ END:VEVENT
                           type="time" 
                           value={config.startTime}
                           onChange={(e) => updateConfig(config.id, 'startTime', e.target.value)}
-                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none"
+                          className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:outline-none"
                         />
                       </div>
-                      <span className="text-slate-300">-</span>
+                      <span className="text-slate-300 dark:text-slate-600">-</span>
                       <div className="flex-1">
                         <input 
                           type="time" 
                           value={config.endTime}
                           onChange={(e) => updateConfig(config.id, 'endTime', e.target.value)}
-                          className="w-full p-2 bg-slate-50 border border-slate-200 rounded-lg text-slate-900 text-sm focus:outline-none"
+                          className="w-full p-2 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-lg text-slate-900 dark:text-white text-sm focus:outline-none"
                         />
                       </div>
                     </div>
@@ -651,7 +779,7 @@ END:VEVENT
 
             <button 
               onClick={resetConfigs}
-              className="w-full py-4 rounded-xl bg-slate-100 text-slate-500 font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
+              className="w-full py-4 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
             >
               <RotateCcw size={16} /> Reset All Settings
             </button>
@@ -661,7 +789,7 @@ END:VEVENT
       </main>
 
       {/* Tab Bar */}
-      <nav className="bg-white/90 backdrop-blur-lg border-t border-slate-200 safe-area-bottom">
+      <nav className="bg-white/90 dark:bg-slate-800/90 backdrop-blur-lg border-t border-slate-200 dark:border-slate-700 safe-area-bottom">
         <div className="flex justify-around items-center p-2 pb-4">
           <button onClick={() => setView('calendar')} className={`flex flex-col items-center p-2 rounded-lg transition-colors ${view === 'calendar' ? 'text-blue-600' : 'text-slate-400'}`}>
             <Calendar size={24} strokeWidth={view === 'calendar' ? 2.5 : 2} />
@@ -688,14 +816,14 @@ END:VEVENT
       {/* Add Shift Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-200">
+          <div className="bg-white dark:bg-slate-800 w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl animate-in slide-in-from-bottom-10 fade-in duration-200">
             <div className="p-6">
               <div className="flex justify-between items-center mb-6">
                  <div>
-                   <h3 className="text-xl font-bold text-slate-900">{isCustomMode ? 'Custom Shift' : 'Add Shift'}</h3>
-                   <p className="text-sm text-slate-500">{selectedDate}</p>
+                   <h3 className="text-xl font-bold text-slate-900 dark:text-white">{isCustomMode ? 'Custom Shift' : 'Add Shift'}</h3>
+                   <p className="text-sm text-slate-500 dark:text-slate-400">{selectedDate}</p>
                  </div>
-                 <button onClick={() => setShowAddModal(false)} className="bg-slate-100 p-2 rounded-full text-slate-500">
+                 <button onClick={() => setShowAddModal(false)} className="bg-slate-100 dark:bg-slate-700 p-2 rounded-full text-slate-500 dark:text-slate-400">
                    <Plus className="rotate-45" size={20} />
                  </button>
               </div>
@@ -704,40 +832,51 @@ END:VEVENT
                 <div className="space-y-4 mb-4">
                   <div>
                     <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Shift Name</label>
-                    <input type="text" value={customForm.label} onChange={(e) => setCustomForm({...customForm, label: e.target.value})} className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                    <input type="text" value={customForm.label} onChange={(e) => setCustomForm({...customForm, label: e.target.value})} className="w-full mt-1 p-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                   </div>
                   <div className="flex gap-3">
                     <div className="flex-1">
                       <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">Start</label>
-                      <input type="time" value={customForm.start} onChange={(e) => setCustomForm({...customForm, start: e.target.value})} className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                      <input type="time" value={customForm.start} onChange={(e) => setCustomForm({...customForm, start: e.target.value})} className="w-full mt-1 p-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                     </div>
                     <div className="flex-1">
                       <label className="text-xs font-medium text-slate-400 uppercase tracking-wide">End</label>
-                      <input type="time" value={customForm.end} onChange={(e) => setCustomForm({...customForm, end: e.target.value})} className="w-full mt-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none" />
+                      <input type="time" value={customForm.end} onChange={(e) => setCustomForm({...customForm, end: e.target.value})} className="w-full mt-1 p-3 bg-slate-50 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 rounded-xl text-slate-900 dark:text-white font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none" />
                     </div>
                   </div>
                   <div className="flex gap-2 pt-2">
-                    <button onClick={() => setIsCustomMode(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-medium">Cancel</button>
+                    <button onClick={() => setIsCustomMode(false)} className="flex-1 py-3 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-medium">Cancel</button>
                     <button onClick={addCustomShift} className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium shadow-lg shadow-blue-200">Save Shift</button>
                   </div>
                 </div>
               ) : (
                 <>
                   <div className="grid grid-cols-2 gap-3 mb-4">
-                    {shiftConfigs.map((type) => (
-                      <button key={type.id} onClick={() => addShift(type.id)} className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${type.id === 'off' ? 'border-slate-100 bg-slate-50 text-slate-500' : 'border-transparent ' + type.color}`}>
-                        <span className={`mb-2 ${type.textColor}`}>{getIcon(type.iconName)}</span>
-                        <span className={`font-semibold text-sm ${type.textColor}`}>{type.label}</span>
-                        {type.startTime && <span className="text-xs opacity-70 mt-1">{type.startTime}-{type.endTime}</span>}
-                      </button>
-                    ))}
-                    <button onClick={() => setIsCustomMode(true)} className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-slate-100 bg-white text-slate-500 hover:border-blue-200 hover:text-blue-600 transition-colors">
+                    {shiftConfigs.map((type) => {
+                      const buttonColor = type.id === 'off' 
+                        ? 'bg-slate-50 dark:bg-slate-700 text-slate-500' 
+                        : (isDarkMode ? type.darkColor : type.color);
+                      const iconColor = isDarkMode ? type.darkTextColor : type.textColor;
+                      
+                      return (
+                        <button 
+                          key={type.id} 
+                          onClick={() => addShift(type.id)} 
+                          className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all ${type.id === 'off' ? 'border-slate-100 dark:border-slate-600' : 'border-transparent'} ${buttonColor}`}
+                        >
+                          <span className={`mb-2 ${iconColor}`}>{getIcon(type.iconName)}</span>
+                          <span className={`font-semibold text-sm ${iconColor}`}>{type.label}</span>
+                          {type.startTime && <span className="text-xs opacity-70 mt-1">{type.startTime}-{type.endTime}</span>}
+                        </button>
+                      );
+                    })}
+                    <button onClick={() => setIsCustomMode(true)} className="flex flex-col items-center justify-center p-4 rounded-xl border-2 border-slate-100 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-500 hover:border-blue-200 hover:text-blue-600 transition-colors">
                         <span className="mb-2"><Edit3 size={16} /></span>
                         <span className="font-semibold text-sm">Custom</span>
                         <span className="text-xs opacity-70 mt-1">Set times</span>
                     </button>
                   </div>
-                  <button onClick={() => addShift('off')} className="w-full py-3 rounded-xl text-red-500 font-medium text-sm flex items-center justify-center gap-2 hover:bg-red-50 transition-colors">
+                  <button onClick={() => addShift('off')} className="w-full py-3 rounded-xl text-red-500 font-medium text-sm flex items-center justify-center gap-2 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
                     <Trash2 size={16} /> Clear Shift
                   </button>
                 </>

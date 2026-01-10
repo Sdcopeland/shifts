@@ -1,0 +1,27 @@
+{
+  "name": "ShiftSync",
+  "short_name": "ShiftSync",
+  "description": "Track your work shifts and calculate earnings",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Add Shift",
+      "short_name": "Add Shift",
+      "description": "Quickly add a new shift",
+      "url": "/"
+    }
+  ]
+}
