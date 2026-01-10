@@ -356,15 +356,15 @@ export default function App() {
     }
   };
 
-  const generateICS = async () => {
+  const generateICS = () => {
     const today = getTodayStr();
     let icsContent = 
 `BEGIN:VCALENDAR
- VERSION:2.0
- PRODID:-//ShiftSync//iOS Scheduler//EN
- CALSCALE:GREGORIAN
- METHOD:PUBLISH
- `;
+VERSION:2.0
+PRODID:-//ShiftSync//iOS Scheduler//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+`;
     let exportCount = 0;
     Object.values(shifts).forEach(shift => {
       // SMART EXPORT: Only future shifts to avoid duplicates
@@ -382,7 +382,6 @@ export default function App() {
       const [startH, startM] = (shift.startTime || '09:00').split(':').map(Number);
       const [endH, endM] = (shift.endTime || '17:00').split(':').map(Number);
       const startDate = new Date(y, m - 1, d, startH, startM);
-      // eslint-disable-next-line prefer-const
       let endDate = new Date(y, m - 1, d, endH, endM);
       if (endDate < startDate) endDate.setDate(endDate.getDate() + 1);
 
@@ -390,14 +389,14 @@ export default function App() {
 
       icsContent += 
 `BEGIN:VEVENT
- UID:${shift.id}@shiftsync.app
- DTSTAMP:${formatICSDate(new Date())}
- DTSTART:${formatICSDate(startDate)}
- DTEND:${formatICSDate(endDate)}
- SUMMARY:${label}
- DESCRIPTION:Scheduled via ShiftSync
- END:VEVENT
- `;
+UID:${shift.id}@shiftsync.app
+DTSTAMP:${formatICSDate(new Date())}
+DTSTART:${formatICSDate(startDate)}
+DTEND:${formatICSDate(endDate)}
+SUMMARY:${label}
+DESCRIPTION:Scheduled via ShiftSync
+END:VEVENT
+`;
       exportCount++;
     });
 
@@ -408,39 +407,14 @@ export default function App() {
       return;
     }
 
-    // Try multiple approaches for iOS
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-
-    if (isIOS) {
-      // Approach 1: Create hidden anchor and dispatch click event
-      const link = document.createElement('a');
-      link.href = window.URL.createObjectURL(blob);
-      link.download = 'myshifts.ics';
-      link.style.display = 'none';
-      document.body.appendChild(link);
-
-      const clickEvent = new MouseEvent('click', {
-        view: window,
-        bubbles: true,
-        cancelable: true
-      });
-      link.dispatchEvent(clickEvent);
-
-      setTimeout(() => {
-        document.body.removeChild(link);
-        alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
-      }, 100);
-    } else {
-      // Non-iOS: Use data URI approach
-      const encodedData = encodeURIComponent(icsContent);
-      const dataUri = `data:text/calendar;charset=utf-8,${encodedData}`;
-      window.location.href = dataUri;
-      
-      setTimeout(() => {
-        alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
-      }, 100);
-    }
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'myshifts.ics');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const exportData = async () => {
