@@ -410,39 +410,19 @@ export default function App() {
 
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
     
-    // Temporarily unregister service worker to allow blob downloads
-    let serviceWorkerRegistration = null;
-    if ('serviceWorker' in navigator) {
-      try {
-        serviceWorkerRegistration = await navigator.serviceWorker.getRegistration();
-        if (serviceWorkerRegistration) {
-          await serviceWorkerRegistration.unregister();
-        }
-      } catch (e) {
-        console.error('Failed to unregister service worker:', e);
-      }
-    }
-
-    // Perform export
+    // Use window.open() instead of anchor.click() - may work better on iOS
     const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'myshifts.ics');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-
+    window.open(url, '_blank');
+    
+    // Revoke URL after a delay
+    setTimeout(() => {
+      window.URL.revokeObjectURL(url);
+    }, 5000);
+    
+    // Show success message
     setTimeout(() => {
       alert(`Exported ${exportCount} shift${exportCount === 1 ? '' : 's'} to calendar!`);
     }, 100);
-
-    // Re-register service worker after a short delay
-    if (serviceWorkerRegistration) {
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
-    }
   };
 
   const exportData = async () => {
@@ -450,36 +430,16 @@ export default function App() {
       const jsonData = await shiftDB.exportData();
       const blob = new Blob([jsonData], { type: 'application/json' });
       
-      let serviceWorkerRegistration = null;
-      if ('serviceWorker' in navigator) {
-        try {
-          serviceWorkerRegistration = await navigator.serviceWorker.getRegistration();
-          if (serviceWorkerRegistration) {
-            await serviceWorkerRegistration.unregister();
-          }
-        } catch (e) {
-          console.error('Failed to unregister service worker:', e);
-        }
-      }
-
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', 'shiftsync-backup.json');
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-
+      window.open(url, '_blank');
+      
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 5000);
+      
       setTimeout(() => {
         alert('Backup exported successfully!');
       }, 100);
-
-      if (serviceWorkerRegistration) {
-        setTimeout(() => {
-          window.location.reload();
-        }, 2000);
-      }
     } catch (e) {
       console.error('Failed to export data:', e);
       setError(`Failed to export data: ${e}`);
